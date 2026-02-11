@@ -54,6 +54,8 @@
 #include "tbsci-i2c.h"
 #include "tbs-ci.h"
 
+extern unsigned int fgpi_err_irq;
+
 unsigned int verbose;
 module_param(verbose, int, 0644);
 MODULE_PARM_DESC(verbose, "verbose startup messages, default is 1 (yes)");
@@ -62,9 +64,9 @@ unsigned int int_type;
 module_param(int_type, int, 0644);
 MODULE_PARM_DESC(int_type, "force Interrupt Handler type: 0=INT-A, 1=MSI, 2=MSI-X. default INT-A mode");
 
-static unsigned int auto_dma_recover = 1;
+static unsigned int auto_dma_recover = 0;
 module_param(auto_dma_recover, int, 0644);
-MODULE_PARM_DESC(auto_dma_recover, "automatically restart DMA after FGPI anomalies (default: 1)");
+MODULE_PARM_DESC(auto_dma_recover, "automatically restart DMA after FGPI anomalies (default: 0)");
 
 #define DRIVER_NAME	"SAA716x Budget"
 
@@ -261,53 +263,51 @@ static irqreturn_t saa716x_budget_pci_irq(int irq, void *dev_id)
 #endif
 
 	if (stat_l) {
-		fgpi_err_l = stat_l & (MSI_INT_OVRFLW_FGPI_0 |
-				       MSI_INT_OVRFLW_FGPI_1 |
-				       MSI_INT_OVRFLW_FGPI_2 |
-				       MSI_INT_OVRFLW_FGPI_3 |
-				       MSI_INT_AVINT_FGPI_0 |
-				       MSI_INT_AVINT_FGPI_1 |
-				       MSI_INT_AVINT_FGPI_2 |
-				       MSI_INT_AVINT_FGPI_3);
-		if (fgpi_err_l)
-			dprintk(SAA716x_NOTICE, 1, "FGPI interrupt anomaly stat_l=0x%08x", stat_l);
-		if (fgpi_err_l && auto_dma_recover) {
-			struct saa716x_adapter *adap;
+		if (fgpi_err_irq) {
+			fgpi_err_l = stat_l & (MSI_INT_OVRFLW_FGPI_0 |
+					       MSI_INT_OVRFLW_FGPI_1 |
+					       MSI_INT_OVRFLW_FGPI_2 |
+					       MSI_INT_OVRFLW_FGPI_3 |
+					       MSI_INT_AVINT_FGPI_0 |
+					       MSI_INT_AVINT_FGPI_1 |
+					       MSI_INT_AVINT_FGPI_2 |
+					       MSI_INT_AVINT_FGPI_3);
+			if (fgpi_err_l)
+				dprintk(SAA716x_NOTICE, 1, "FGPI interrupt anomaly stat_l=0x%08x", stat_l);
+			if (fgpi_err_l && auto_dma_recover) {
+				struct saa716x_adapter *adap;
 
-			if (fgpi_err_l & (MSI_INT_OVRFLW_FGPI_0 | MSI_INT_AVINT_FGPI_0)) {
-				adap = saa716x_find_adapter_by_port(saa716x, 0);
-				if (adap)
-					saa716x_adapter_schedule_recovery(adap, SAA716X_REC_IRQ_ANOMALY);
-			}
-			if (fgpi_err_l & (MSI_INT_OVRFLW_FGPI_1 | MSI_INT_AVINT_FGPI_1)) {
-				adap = saa716x_find_adapter_by_port(saa716x, 1);
-				if (adap)
-					saa716x_adapter_schedule_recovery(adap, SAA716X_REC_IRQ_ANOMALY);
-			}
-			if (fgpi_err_l & (MSI_INT_OVRFLW_FGPI_2 | MSI_INT_AVINT_FGPI_2)) {
-				adap = saa716x_find_adapter_by_port(saa716x, 2);
-				if (adap)
-					saa716x_adapter_schedule_recovery(adap, SAA716X_REC_IRQ_ANOMALY);
-			}
-			if (fgpi_err_l & (MSI_INT_OVRFLW_FGPI_3 | MSI_INT_AVINT_FGPI_3)) {
-				adap = saa716x_find_adapter_by_port(saa716x, 3);
-				if (adap)
-					saa716x_adapter_schedule_recovery(adap, SAA716X_REC_IRQ_ANOMALY);
+				if (fgpi_err_l & (MSI_INT_OVRFLW_FGPI_0 | MSI_INT_AVINT_FGPI_0)) {
+					adap = saa716x_find_adapter_by_port(saa716x, 0);
+					if (adap)
+						saa716x_adapter_schedule_recovery(adap, SAA716X_REC_IRQ_ANOMALY);
+				}
+				if (fgpi_err_l & (MSI_INT_OVRFLW_FGPI_1 | MSI_INT_AVINT_FGPI_1)) {
+					adap = saa716x_find_adapter_by_port(saa716x, 1);
+					if (adap)
+						saa716x_adapter_schedule_recovery(adap, SAA716X_REC_IRQ_ANOMALY);
+				}
+				if (fgpi_err_l & (MSI_INT_OVRFLW_FGPI_2 | MSI_INT_AVINT_FGPI_2)) {
+					adap = saa716x_find_adapter_by_port(saa716x, 2);
+					if (adap)
+						saa716x_adapter_schedule_recovery(adap, SAA716X_REC_IRQ_ANOMALY);
+				}
+				if (fgpi_err_l & (MSI_INT_OVRFLW_FGPI_3 | MSI_INT_AVINT_FGPI_3)) {
+					adap = saa716x_find_adapter_by_port(saa716x, 3);
+					if (adap)
+						saa716x_adapter_schedule_recovery(adap, SAA716X_REC_IRQ_ANOMALY);
+				}
 			}
 		}
 
-		if (stat_l & (MSI_INT_TAGACK_FGPI_0 | MSI_INT_OVRFLW_FGPI_0 | MSI_INT_AVINT_FGPI_0)) {
+		if (stat_l & MSI_INT_TAGACK_FGPI_0)
 			tasklet_schedule(&saa716x->fgpi[0].tasklet);
-		}
-		if (stat_l & (MSI_INT_TAGACK_FGPI_1 | MSI_INT_OVRFLW_FGPI_1 | MSI_INT_AVINT_FGPI_1)) {
+		if (stat_l & MSI_INT_TAGACK_FGPI_1)
 			tasklet_schedule(&saa716x->fgpi[1].tasklet);
-		}
-		if (stat_l & (MSI_INT_TAGACK_FGPI_2 | MSI_INT_OVRFLW_FGPI_2 | MSI_INT_AVINT_FGPI_2)) {
+		if (stat_l & MSI_INT_TAGACK_FGPI_2)
 			tasklet_schedule(&saa716x->fgpi[2].tasklet);
-		}
-		if (stat_l & (MSI_INT_TAGACK_FGPI_3 | MSI_INT_OVRFLW_FGPI_3 | MSI_INT_AVINT_FGPI_3)) {
+		if (stat_l & MSI_INT_TAGACK_FGPI_3)
 			tasklet_schedule(&saa716x->fgpi[3].tasklet);
-		}
 	}
 
 	return IRQ_HANDLED;

@@ -1,4 +1,5 @@
 #include <linux/kernel.h>
+#include <linux/moduleparam.h>
 
 #include "saa716x_mod.h"
 
@@ -45,6 +46,11 @@ static const u32 msi_int_avint[] = {
 	MSI_INT_AVINT_FGPI_2,
 	MSI_INT_AVINT_FGPI_3
 };
+
+unsigned int fgpi_err_irq = 0;
+module_param(fgpi_err_irq, int, 0644);
+MODULE_PARM_DESC(fgpi_err_irq, "enable FGPI overflow/AVINT interrupts (default: 0)");
+EXPORT_SYMBOL_GPL(fgpi_err_irq);
 
 void saa716x_fgpiint_disable(struct saa716x_dmabuf *dmabuf, int channel)
 {
@@ -321,9 +327,13 @@ int saa716x_fgpi_start(struct saa716x_dev *saa716x, int port,
 
 	SAA716x_EPWR(fgpi_port, FGPI_CONTROL, val);
 
-	SAA716x_EPWR(MSI, MSI_INT_ENA_SET_L, msi_int_tagack[port] |
-					       msi_int_ovrflw[port] |
-					       msi_int_avint[port]);
+	if (fgpi_err_irq) {
+		SAA716x_EPWR(MSI, MSI_INT_ENA_SET_L, msi_int_tagack[port] |
+						       msi_int_ovrflw[port] |
+						       msi_int_avint[port]);
+	} else {
+		SAA716x_EPWR(MSI, MSI_INT_ENA_SET_L, msi_int_tagack[port]);
+	}
 
 	return 0;
 }
@@ -336,9 +346,13 @@ int saa716x_fgpi_stop(struct saa716x_dev *saa716x, int port)
 
 	fgpi_port = fgpi_ch[port];
 
-	SAA716x_EPWR(MSI, MSI_INT_ENA_CLR_L, msi_int_tagack[port] |
-					       msi_int_ovrflw[port] |
-					       msi_int_avint[port]);
+	if (fgpi_err_irq) {
+		SAA716x_EPWR(MSI, MSI_INT_ENA_CLR_L, msi_int_tagack[port] |
+						       msi_int_ovrflw[port] |
+						       msi_int_avint[port]);
+	} else {
+		SAA716x_EPWR(MSI, MSI_INT_ENA_CLR_L, msi_int_tagack[port]);
+	}
 
 	val = SAA716x_EPRD(fgpi_port, FGPI_CONTROL);
 	val &= ~0x3000;
