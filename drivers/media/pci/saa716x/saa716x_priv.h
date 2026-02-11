@@ -6,6 +6,7 @@
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/mutex.h>
+#include <linux/workqueue.h>
 
 #include <linux/pci.h>
 #include <linux/ioport.h>
@@ -119,6 +120,9 @@ struct saa716x_adapter {
 
 	u8				feeds;
 	u8				count;
+	u32				recover_count;
+	unsigned long			recover_reasons;
+	struct work_struct		recover_work;
 
 	struct i2c_client	*i2c_client_demod;
 	struct i2c_client	*i2c_client_tuner;
